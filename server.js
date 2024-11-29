@@ -16,7 +16,7 @@ app.use(bodyParser.json({ limit: "10mb" }));
 app.use(express.json());
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: "https://cms-frontend-ebon.vercel.app",
     methods: ["GET", "POST", "OPTIONS", "DELETE", "PUT"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
