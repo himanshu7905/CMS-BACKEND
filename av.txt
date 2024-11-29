@@ -1,0 +1,168 @@
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { createClient } = require("@supabase/supabase-js");
+
+const app = express();
+const port = 5000;
+
+// Supabase setup
+const supabaseUrl = "https://adbusyzbvzlgetciiwso.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkYnVzeXpidnpsZ2V0Y2lpd3NvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDU5OTAzNzUsImV4cCI6MjAyMTU2NjM3NX0.Mvu8B7SnAHKiCl4ZieRkU0tUAKwajyulvW5a13A7apQ";
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+app.use(cors());
+app.use(bodyParser.json());
+
+// Secret for JWT
+const SECRET = "your_jwt_secret";
+
+// Middleware to verify JWT
+const verifyToken = (req, res, next) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(403).send("Access denied");
+
+    jwt.verify(token, SECRET, (err, decoded) => {
+        if (err) return res.status(403).send("Invalid token");
+        req.user = decoded;
+        next();
+    });
+};
+
+// Authentication routes
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { createClient } = require("@supabase/supabase-js");
+
+const app = express();
+const port = 5000;
+
+// Supabase setup
+const supabaseUrl = "https://adbusyzbvzlgetciiwso.supabase.co";
+const supabaseKey = "YOUR_SUPABASE_KEY";
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+app.use(cors());
+app.use(bodyParser.json());
+
+// Secret for JWT
+const SECRET = "your_jwt_secret";
+
+// Middleware to verify JWT
+const verifyToken = (req, res, next) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(403).send("Access denied");
+
+    jwt.verify(token, SECRET, (err, decoded) => {
+        if (err) return res.status(403).send("Invalid token");
+        req.user = decoded;
+        next();
+    });
+};
+
+// Authentication route for login
+app.post("/login", async (req, res) => {
+    const { email, password } = req.body;
+    const { data: users, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("email", email);
+
+    if (error || users.length === 0) return res.status(400).send("Invalid credentials");
+
+    const user = users[0];
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) return res.status(400).send("Invalid credentials");
+
+    const token = jwt.sign({ id: user.id, role: user.role }, SECRET, { expiresIn: "1h" });
+    res.send({ token });
+});
+
+// Fetch contacts route (using SQL)
+app.get("/contacts", verifyToken, async (req, res) => {
+    const { role, id } = req.user;
+    const query = role === "admin" 
+        ? `SELECT * FROM contacts` 
+        : `SELECT * FROM contacts WHERE user_id = $1`;
+        
+    const { data, error } = await supabase.rpc('execute_sql', { query, params: [id] });
+
+    if (error) return res.status(500).send("Error fetching contacts");
+    res.send(data);
+});
+
+// Create a new contact (using SQL)
+app.post("/contacts", verifyToken, async (req, res) => {
+    const { name, email, phone, address } = req.body;
+    const userId = req.user.id;
+
+    const query = `INSERT INTO contacts (user_id, name, email, phone, address) 
+                   VALUES ($1, $2, $3, $4, $5) RETURNING *`;
+
+    const { data, error } = await supabase.rpc('execute_sql', { query, params: [userId, name, email, phone, address] });
+
+    if (error) return res.status(500).send("Error creating contact");
+    res.send(data);
+});
+
+// Update a contact (using SQL)
+app.put("/contacts/:id", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, email, phone, address } = req.body;
+    const userId = req.user.id;
+
+    // Ensure only admins or contact owners can update
+    const { data: contact } = await supabase.rpc('execute_sql', {
+        query: `SELECT * FROM contacts WHERE id = $1`,
+        params: [id]
+    });
+
+    if (!contact || (req.user.role !== "admin" && contact.user_id !== userId)) {
+        return res.status(403).send("Access denied");
+    }
+
+    const query = `UPDATE contacts 
+                   SET name = $1, email = $2, phone = $3, address = $4
+                   WHERE id = $5 RETURNING *`;
+
+    const { data: updatedContact, error } = await supabase.rpc('execute_sql', {
+        query,
+        params: [name, email, phone, address, id]
+    });
+
+    if (error) return res.status(500).send("Error updating contact");
+    res.send(updatedContact);
+});
+
+// Delete a contact (using SQL)
+app.delete("/contacts/:id", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Ensure only admins or contact owners can delete
+    const { data: contact } = await supabase.rpc('execute_sql', {
+        query: `SELECT * FROM contacts WHERE id = $1`,
+        params: [id]
+    });
+
+    if (!contact || (req.user.role !== "admin" && contact.user_id !== userId)) {
+        return res.status(403).send("Access denied");
+    }
+
+    const query = `DELETE FROM contacts WHERE id = $1 RETURNING *`;
+
+    const { data: deletedContact, error } = await supabase.rpc('execute_sql', {
+        query,
+        params: [id]
+    });
+
+    if (error) return res.status(500).send("Error deleting contact");
+    res.send(deletedContact);
+});
+
+app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
